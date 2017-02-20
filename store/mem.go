@@ -1,11 +1,7 @@
 package store
 
 import (
-	"bytes"
-	"io"
-	"io/ioutil"
-	"log"
-	"os"
+	"context"
 
 	"github.com/aybabtme/epher/merkle"
 	"github.com/aybabtme/epher/thash"
@@ -23,45 +19,35 @@ func NewMemoryStore() merkle.Store {
 	}
 }
 
-func (mem *MemoryStore) PutNode(node merkle.Node) error {
+func (mem *MemoryStore) PutNode(ctx context.Context, node merkle.Node) error {
 	mem.node[node.Sum] = node
-	log.Printf("putNode")
 	return nil
 }
 
-func (mem *MemoryStore) GetNode(sum thash.Sum) (merkle.Node, bool, error) {
+func (mem *MemoryStore) GetNode(ctx context.Context, sum thash.Sum) (merkle.Node, bool, error) {
 	node, ok := mem.node[sum]
 	if !ok {
 		return merkle.Node{}, false, nil
 	}
-	log.Printf("getNode")
 	return node, true, nil
 }
 
-func (mem *MemoryStore) PutBlob(r io.Reader, done func() thash.Sum) error {
-	data, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-	log.Printf("put %q", data)
-	mem.data[done()] = data
+func (mem *MemoryStore) PutBlob(ctx context.Context, sum thash.Sum, data []byte) error {
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	mem.data[sum] = cp
 	return nil
 }
 
-func (mem *MemoryStore) GetBlob(sum thash.Sum) (io.ReadCloser, error) {
+func (mem *MemoryStore) GetBlob(ctx context.Context, sum thash.Sum) ([]byte, bool, error) {
 	data, ok := mem.data[sum]
-	if !ok {
-		return nil, os.ErrNotExist
-	}
-	log.Printf("get %q", data)
-	return ioutil.NopCloser(bytes.NewReader(data)), nil
+	return data, ok, nil
 }
 
-func (mem *MemoryStore) InfoBlob(sum thash.Sum) (int64, bool, error) {
+func (mem *MemoryStore) InfoBlob(ctx context.Context, sum thash.Sum) (int64, bool, error) {
 	data, ok := mem.data[sum]
 	if !ok {
 		return 0, false, nil
 	}
-	log.Printf("info %q", data)
 	return int64(len(data)), true, nil
 }

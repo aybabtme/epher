@@ -2,6 +2,7 @@ package merkle_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/aybabtme/epher/merkle"
@@ -10,11 +11,14 @@ import (
 
 func ExampleTree() {
 
+	ctx := context.Background()
+
 	store := store.NewMemoryStore()
 
 	want := []byte("123456789")
 
 	tree, _, err := merkle.Build(
+		ctx,
 		bytes.NewReader(want),
 		store,
 		merkle.WithBlobSize(1),
@@ -27,7 +31,7 @@ func ExampleTree() {
 
 	buf := bytes.NewBuffer(nil)
 
-	invalid, err := tree.Retrieve(buf, store)
+	invalid, err := tree.Retrieve(ctx, buf, store)
 	if err != nil {
 		panic(err)
 	}
@@ -45,11 +49,14 @@ func ExampleTree() {
 
 func ExampleTree_by_hash() {
 
+	ctx := context.Background()
+
 	store := store.NewMemoryStore()
 
 	want := []byte("123456789")
 
 	_, sum, err := merkle.Build(
+		ctx,
 		bytes.NewReader(want),
 		store,
 		merkle.WithBlobSize(1),
@@ -58,7 +65,7 @@ func ExampleTree_by_hash() {
 		panic(err)
 	}
 
-	tree, err := merkle.RetrieveTree(sum, store)
+	tree, err := merkle.RetrieveTree(ctx, sum, store)
 	if err != nil {
 		panic(err)
 	}
@@ -67,7 +74,7 @@ func ExampleTree_by_hash() {
 
 	buf := bytes.NewBuffer(nil)
 
-	invalid, err := tree.Retrieve(buf, store)
+	invalid, err := tree.Retrieve(ctx, buf, store)
 	if err != nil {
 		panic(err)
 	}

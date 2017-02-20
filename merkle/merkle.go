@@ -2,6 +2,7 @@ package merkle
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,19 +13,18 @@ import (
 )
 
 type Store interface {
-	PutNode(node Node) error
-	GetNode(thash.Sum) (Node, bool, error)
-
-	PutBlob(r io.Reader, done func() thash.Sum) error
-	GetBlob(thash.Sum) (io.ReadCloser, error)
-	InfoBlob(thash.Sum) (int64, bool, error)
+	PutNode(context.Context, Node) error
+	GetNode(context.Context, thash.Sum) (Node, bool, error)
+	PutBlob(context.Context, thash.Sum, []byte) error
+	GetBlob(context.Context, thash.Sum) ([]byte, bool, error)
+	InfoBlob(context.Context, thash.Sum) (int64, bool, error)
 }
 
 type Option func(*config)
 
 type config struct {
-	HashType thash.Type `json:"hash_type"`
-	BlobSize int64      `json:"blob_size"`
+	HashType thash.Type
+	BlobSize int64
 }
 
 func newConfig(opts []Option) *config {
@@ -41,11 +41,9 @@ func newConfig(opts []Option) *config {
 func WithBlobSize(sz int64) Option      { return func(opts *config) { opts.BlobSize = sz } }
 func WithHashType(ht thash.Type) Option { return func(opts *config) { opts.HashType = ht } }
 
-func Build(r io.Reader, store Store, opts ...Option) (*Tree, thash.Sum, error) {
+func Build(ctx context.Context, r io.Reader, store Store, opts ...Option) (*Tree, thash.Sum, error) {
 
 	config := newConfig(opts)
-
-	buf := bytes.NewBuffer(nil)
 
 	rdbuf := bytes.NewBuffer(nil)
 
@@ -53,7 +51,6 @@ func Build(r io.Reader, store Store, opts ...Option) (*Tree, thash.Sum, error) {
 
 	reachedEOF := false
 	for !reachedEOF {
-		buf.Reset()
 		rdbuf.Reset()
 
 		n, err := io.CopyN(rdbuf, r, config.BlobSize)
@@ -65,14 +62,14 @@ func Build(r io.Reader, store Store, opts ...Option) (*Tree, thash.Sum, error) {
 			break
 		}
 
-		sum, n, err := copyBlob(config.HashType, buf, rdbuf)
+		data := rdbuf.Bytes()
+
+		sum, n, err := copyBlob(config.HashType, ioutil.Discard, rdbuf)
 		if err != nil {
 			return nil, thash.Sum{}, err
 		}
 
-		getSum := func() thash.Sum { return sum }
-
-		if err := store.PutBlob(buf, getSum); err != nil {
+		if err := store.PutBlob(ctx, sum, data); err != nil {
 			return nil, thash.Sum{}, err
 		}
 
@@ -80,7 +77,7 @@ func Build(r io.Reader, store Store, opts ...Option) (*Tree, thash.Sum, error) {
 	}
 
 	tree := newTree(bis)
-	if err := tree.persist(store); err != nil {
+	if err := tree.persist(ctx, store); err != nil {
 		return nil, thash.Sum{}, err
 	}
 	return tree, tree.HashSum, nil
@@ -98,7 +95,10 @@ func copyBlob(t thash.Type, w io.Writer, r io.Reader) (thash.Sum, int64, error) 
 	return thash.MakeSum(h), n, err
 }
 
-var errMalformedTree = errors.New("tree is malformed")
+var (
+	errMalformedTree = errors.New("tree is malformed")
+	errDataMissing   = errors.New("data described by the tree can't be found in store")
+)
 
 // Node is a node in a merkle tree. A node is sufficient
 // to retrieve the whole of a merkle tree rooted in this node.
@@ -107,19 +107,19 @@ type Node struct {
 	Start, End thash.Sum
 }
 
-func RetrieveTree(sum thash.Sum, store Store) (*Tree, error) {
-	root, found, err := store.GetNode(sum)
+func RetrieveTree(ctx context.Context, sum thash.Sum, store Store) (*Tree, error) {
+	root, found, err := store.GetNode(ctx, sum)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
 		return &Tree{HashSum: sum}, nil
 	}
-	start, err := RetrieveTree(root.Start, store)
+	start, err := RetrieveTree(ctx, root.Start, store)
 	if err != nil {
 		return nil, err
 	}
-	end, err := RetrieveTree(root.End, store)
+	end, err := RetrieveTree(ctx, root.End, store)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +130,7 @@ func RetrieveTree(sum thash.Sum, store Store) (*Tree, error) {
 		branch.SizeByte = branch.Start.SizeByte + branch.End.SizeByte
 		return nil
 	}, func(leaf *Tree) error {
-		size, _, err := store.InfoBlob(leaf.HashSum)
+		size, _, err := store.InfoBlob(ctx, leaf.HashSum)
 		leaf.SizeByte = size
 		return err
 	})
@@ -170,14 +170,14 @@ func walk(tree *Tree, onBranch, onLeaf func(*Tree) error) error {
 	}
 }
 
-func (tree *Tree) Retrieve(wr io.Writer, store Store) (invalid []*Tree, err error) {
+func (tree *Tree) Retrieve(ctx context.Context, wr io.Writer, store Store) (invalid []*Tree, err error) {
 	if wr == nil {
 		wr = ioutil.Discard
 	}
-	return tree.retrieve(wr, store)
+	return tree.retrieve(ctx, wr, store)
 }
 
-func (tree *Tree) retrieve(wr io.Writer, store Store) (invalid []*Tree, err error) {
+func (tree *Tree) retrieve(ctx context.Context, wr io.Writer, store Store) (invalid []*Tree, err error) {
 	onBranch := func(branch *Tree) error {
 		// verify that this.sum == sum(start.sum, end.sum)
 		// then verify:
@@ -192,36 +192,40 @@ func (tree *Tree) retrieve(wr io.Writer, store Store) (invalid []*Tree, err erro
 		return nil
 	}
 	onLeaf := func(leaf *Tree) error {
-		rd, err := store.GetBlob(leaf.HashSum)
+		blob, found, err := store.GetBlob(ctx, leaf.HashSum)
 		if err != nil {
 			invalid = []*Tree{leaf}
 			return err
 		}
-		defer rd.Close()
-		got, _, err := copyBlob(leaf.HashSum.Type, wr, rd)
+		if !found {
+			invalid = []*Tree{leaf}
+			return errDataMissing
+		}
+
+		got, _, err := copyBlob(leaf.HashSum.Type, wr, bytes.NewReader(blob))
 		if err != nil {
 			invalid = []*Tree{leaf}
 			return err
 		}
 		if !leaf.HashSum.Equal(got) {
 			invalid = []*Tree{leaf}
-			return fmt.Errorf("want sum %v, got %v", leaf.HashSum, got)
+			return fmt.Errorf("want sum %x, got %x", leaf.HashSum.Sum, got.Sum, blob)
 		}
 		return nil
 	}
 	return invalid, walk(tree, onBranch, onLeaf)
 }
 
-func (tree *Tree) persist(store Store) error {
+func (tree *Tree) persist(ctx context.Context, store Store) error {
 
 	onBranch := func(branch *Tree) error {
-		if err := branch.Start.persist(store); err != nil {
+		if err := branch.Start.persist(ctx, store); err != nil {
 			return err
 		}
-		if err := branch.End.persist(store); err != nil {
+		if err := branch.End.persist(ctx, store); err != nil {
 			return err
 		}
-		return store.PutNode(Node{
+		return store.PutNode(ctx, Node{
 			Sum:   branch.HashSum,
 			Start: branch.Start.HashSum,
 			End:   branch.End.HashSum,
