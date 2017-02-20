@@ -1,0 +1,9 @@
+language: go
+go:
+  - master
+  - tip
+install:
+  - mkdir $GOPATH/bin
+  - curl https://glide.sh/get | sh
+script:
+  - go test -cover -v $(glide nv)
