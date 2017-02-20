@@ -47,7 +47,7 @@ func TestCheckLicenses(t *testing.T) {
 			return nil
 		}
 		if _, ok := blacklist[lc.Type]; ok {
-			t.Errorf("PROBLEM! %v in %v", lc.Type, path)
+			t.Errorf("UNACCEPTABLE LICENSE! %v in %v", lc.Type, path)
 			return nil
 		}
 		return nil
