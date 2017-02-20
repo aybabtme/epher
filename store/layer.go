@@ -69,15 +69,15 @@ func (ly *layered) GetBlob(ctx context.Context, sum thash.Sum) ([]byte, bool, er
 	return data, found, err
 }
 
-func (ly *layered) InfoBlob(ctx context.Context, sum thash.Sum) (int64, bool, error) {
+func (ly *layered) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobInfo, bool, error) {
 	var (
-		size int64
+		info merkle.BlobInfo
 		err  error
 	)
 	found := ly.cascade(ctx, func(ctx context.Context, store merkle.Store) bool {
 		var found bool
-		size, found, err = store.InfoBlob(ctx, sum)
+		info, found, err = store.InfoBlob(ctx, sum)
 		return found && err == nil
 	})
-	return size, found, err
+	return info, found, err
 }

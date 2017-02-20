@@ -73,15 +73,15 @@ func (cb *circuitBreak) GetBlob(ctx context.Context, sum thash.Sum) ([]byte, boo
 	return data, found, err
 }
 
-func (cb *circuitBreak) InfoBlob(ctx context.Context, sum thash.Sum) (int64, bool, error) {
+func (cb *circuitBreak) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobInfo, bool, error) {
 	var (
-		size  int64
+		info  merkle.BlobInfo
 		found bool
 	)
 	err := cb.pick(ctx, func(ctx context.Context, store merkle.Store) error {
 		var err error
-		size, found, err = store.InfoBlob(ctx, sum)
+		info, found, err = store.InfoBlob(ctx, sum)
 		return err
 	})
-	return size, found, err
+	return info, found, err
 }

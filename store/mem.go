@@ -44,10 +44,10 @@ func (mem *MemoryStore) GetBlob(ctx context.Context, sum thash.Sum) ([]byte, boo
 	return data, ok, nil
 }
 
-func (mem *MemoryStore) InfoBlob(ctx context.Context, sum thash.Sum) (int64, bool, error) {
+func (mem *MemoryStore) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobInfo, bool, error) {
 	data, ok := mem.data[sum]
 	if !ok {
-		return 0, false, nil
+		return merkle.BlobInfo{}, false, nil
 	}
-	return int64(len(data)), true, nil
+	return merkle.BlobInfo{Size: int64(len(data)), Sum: sum}, true, nil
 }

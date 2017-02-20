@@ -44,17 +44,17 @@ func (race *raced) GetNode(ctx context.Context, sum thash.Sum) (merkle.Node, boo
 
 }
 
-func (race *raced) InfoBlob(ctx context.Context, sum thash.Sum) (int64, bool, error) {
+func (race *raced) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobInfo, bool, error) {
 	type res struct {
-		size  int64
+		info  merkle.BlobInfo
 		found bool
 	}
 	iface, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, error) {
-		size, found, err := store.InfoBlob(ctx, sum)
-		return &res{size: size, found: found}, err
+		info, found, err := store.InfoBlob(ctx, sum)
+		return &res{info: info, found: found}, err
 	})
 	out := iface.(*res)
-	return out.size, out.found, err
+	return out.info, out.found, err
 }
 
 func (race *raced) PutBlob(ctx context.Context, sum thash.Sum, blob []byte) error {

@@ -17,7 +17,7 @@ type Store interface {
 	GetNode(context.Context, thash.Sum) (Node, bool, error)
 	PutBlob(context.Context, thash.Sum, []byte) error
 	GetBlob(context.Context, thash.Sum) ([]byte, bool, error)
-	InfoBlob(context.Context, thash.Sum) (int64, bool, error)
+	InfoBlob(context.Context, thash.Sum) (BlobInfo, bool, error)
 }
 
 type Option func(*config)
@@ -47,7 +47,7 @@ func Build(ctx context.Context, r io.Reader, store Store, opts ...Option) (*Tree
 
 	rdbuf := bytes.NewBuffer(nil)
 
-	var bis []blobInfo
+	var bis []BlobInfo
 
 	reachedEOF := false
 	for !reachedEOF {
@@ -73,7 +73,7 @@ func Build(ctx context.Context, r io.Reader, store Store, opts ...Option) (*Tree
 			return nil, thash.Sum{}, err
 		}
 
-		bis = append(bis, blobInfo{sum: sum, size: n})
+		bis = append(bis, BlobInfo{Sum: sum, Size: n})
 	}
 
 	tree := newTree(bis)
@@ -130,8 +130,8 @@ func RetrieveTree(ctx context.Context, sum thash.Sum, store Store) (*Tree, error
 		branch.SizeByte = branch.Start.SizeByte + branch.End.SizeByte
 		return nil
 	}, func(leaf *Tree) error {
-		size, _, err := store.InfoBlob(ctx, leaf.HashSum)
-		leaf.SizeByte = size
+		bi, _, err := store.InfoBlob(ctx, leaf.HashSum)
+		leaf.SizeByte = bi.Size
 		return err
 	})
 
@@ -237,20 +237,20 @@ func (tree *Tree) persist(ctx context.Context, store Store) error {
 	return walk(tree, onBranch, onLeaf)
 }
 
-type blobInfo struct {
-	sum  thash.Sum
-	size int64
+type BlobInfo struct {
+	Sum  thash.Sum
+	Size int64
 }
 
-func newTree(bis []blobInfo) *Tree {
+func newTree(bis []BlobInfo) *Tree {
 	switch n := len(bis); n {
 	case 0: // no data
 		return nil
 	case 1: // we're a leaf
 		bi := bis[0]
 		return &Tree{
-			HashSum:  bi.sum,
-			SizeByte: bi.size,
+			HashSum:  bi.Sum,
+			SizeByte: bi.Size,
 		}
 	default:
 
