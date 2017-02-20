@@ -197,6 +197,7 @@ func (tree *Tree) retrieve(wr io.Writer, store Store) (invalid []*Tree, err erro
 			invalid = []*Tree{leaf}
 			return err
 		}
+		defer rd.Close()
 		got, _, err := copyBlob(leaf.HashSum.Type, wr, rd)
 		if err != nil {
 			invalid = []*Tree{leaf}
