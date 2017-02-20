@@ -1,5 +1,5 @@
 hash: 61af02bef6513f12aecb8575422e8c2e9311466e4a4d82f5b4e1a3146eaef0c7
-updated: 2017-02-20T15:07:50.601885965-05:00
+updated: 2017-02-20T15:43:26.760348215-05:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: bf17db2c43f59ff3d97a39d1feacef18d75eaf95
@@ -41,5 +41,5 @@ imports:
   - blake2b
   - sha3
 testImports:
-- name: github.com/ryanuber/go-license
-  version: 027a317812857d68bb611443b5c08bbe96e88598
+- name: github.com/aybabtme/go-license
+  version: c754ce772bbbf5f66b046f7cfc2b6f4a5fab4f22

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	license "github.com/ryanuber/go-license"
+	license "github.com/aybabtme/go-license"
 )
 
 func TestCheckLicenses(t *testing.T) {
@@ -33,12 +33,13 @@ func TestCheckLicenses(t *testing.T) {
 		}
 
 		lc, err := license.NewFromDir(path)
-		if err != nil && err.Error() == license.ErrNoLicenseFile {
+		switch err {
+		case license.ErrNoLicenseFile:
 			return nil
-		}
-		if err != nil {
+		case nil: // continue
+		default:
 			t.Fatalf("PROBLEM with %v: %v", path, err)
-			return nil
+			return err
 		}
 
 		if _, ok := whitelist[lc.Type]; ok {
