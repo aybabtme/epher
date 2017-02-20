@@ -1,5 +1,5 @@
 hash: 61af02bef6513f12aecb8575422e8c2e9311466e4a4d82f5b4e1a3146eaef0c7
-updated: 2017-02-20T15:43:26.760348215-05:00
+updated: 2017-02-20T16:58:24.745540607-05:00
 imports:
 - name: github.com/alecthomas/kingpin
   version: bf17db2c43f59ff3d97a39d1feacef18d75eaf95
@@ -11,10 +11,20 @@ imports:
   version: 2efee857e7cfd4f3d0138cc3cbb1b4966962b93a
 - name: github.com/armon/go-metrics
   version: 93f237eba9b0602f3e73710416558854a81d9337
+- name: github.com/aybabtme/log
+  version: 85259b5ee0ac4a8e01732885493e059c4c333059
 - name: github.com/eapache/go-resiliency
   version: b86b1ec0dd4209a588dc1285cdd471e73525c0b3
   subpackages:
   - breaker
+- name: github.com/go-kit/kit
+  version: d99ca5c5049bede38c09cbc0765fd92b4340c4e9
+  subpackages:
+  - log
+- name: github.com/go-logfmt/logfmt
+  version: 390ab7935ee28ec6b286364bba9b4dd6410cb3d5
+- name: github.com/go-stack/stack
+  version: 100eb0c0a9c5b306ca2fb4f165df21d80ada4b82
 - name: github.com/golang/groupcache
   version: 72d04f9fcdec7d3821820cc4a6f150eae553639a
   subpackages:
@@ -31,8 +41,21 @@ imports:
   version: f910dd83c2052566cad78352c33af714358d1372
 - name: github.com/hashicorp/memberlist
   version: 23ad4b7d7b38496cd64c241dfd4c60b7794c254a
+- name: github.com/julienschmidt/httprouter
+  version: b59a38004596b696aca7aa2adccfa68760864d86
+- name: github.com/kr/logfmt
+  version: b84e30acd515aadc4b783ad4ff83aff3299bdfe0
 - name: github.com/miekg/dns
   version: 75229eecb7af00b2736e93b779a78429dcb19472
+- name: github.com/opentracing-contrib/go-stdlib
+  version: 1de4cc2120e71f745a5810488bf64b29b6d7d9f6
+  subpackages:
+  - nethttp
+- name: github.com/opentracing/opentracing-go
+  version: 6edb48674bd9467b8e91fda004f2bd7202d60ce4
+  subpackages:
+  - ext
+  - log
 - name: github.com/sean-/seed
   version: 4969e616e90322a649adab1cd3f42725d99564c7
 - name: golang.org/x/crypto
@@ -40,6 +63,10 @@ imports:
   subpackages:
   - blake2b
   - sha3
+- name: golang.org/x/net
+  version: 6a513affb38dc9788b449d59ffed099b8de18fa0
+  subpackages:
+  - context
 testImports:
 - name: github.com/aybabtme/go-license
   version: c754ce772bbbf5f66b046f7cfc2b6f4a5fab4f22
