@@ -25,12 +25,12 @@ type rpcClient struct {
 	cl      *http.Client
 }
 
-func HTTPClient(addr string, cl *http.Client) merkle.Store {
+func HTTPClient(addr string, codec codec.Codec, cl *http.Client) merkle.Store {
 	if cl == nil {
 		cl = new(http.Client)
 	}
 	cl.Transport = &nethttp.Transport{cl.Transport}
-	return &rpcClient{cl: cl}
+	return &rpcClient{baseURL: addr, codec: codec, cl: cl}
 }
 
 func (rpc *rpcClient) do(
@@ -101,8 +101,7 @@ func (rpc *rpcClient) GetNode(ctx context.Context, sum thash.Sum) (merkle.Node, 
 			return rpc.codec.EncodeSum(w, sum)
 		},
 		func(resp io.Reader) error {
-			var err error
-			node, err = rpc.codec.DecodeNode(resp)
+			err := rpc.codec.DecodeNode(resp, &node)
 			found = true
 			return err
 		},
@@ -118,20 +117,20 @@ func (rpc *rpcClient) PutBlob(ctx context.Context, sum thash.Sum, data []byte) e
 }
 func (rpc *rpcClient) GetBlob(ctx context.Context, sum thash.Sum) ([]byte, bool, error) {
 	var (
-		data  []byte
+		buf   = bytes.NewBuffer(nil)
 		found bool
 	)
-	return data, found, rpc.do(ctx, "GET", "/v1/blobs",
+	err := rpc.do(ctx, "GET", "/v1/blobs",
 		func(w io.Writer) error {
 			return rpc.codec.EncodeSum(w, sum)
 		},
 		func(resp io.Reader) error {
-			var err error
-			_, data, err = rpc.codec.DecodeBlob(resp)
+			err := rpc.codec.DecodeBlob(resp, new(thash.Sum), buf)
 			found = true
 			return err
 		},
 	)
+	return buf.Bytes(), found, err
 }
 func (rpc *rpcClient) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobInfo, bool, error) {
 	var (
@@ -143,8 +142,7 @@ func (rpc *rpcClient) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobI
 			return rpc.codec.EncodeSum(w, sum)
 		},
 		func(resp io.Reader) error {
-			var err error
-			info, err = rpc.codec.DecodeBlobInfo(resp)
+			err := rpc.codec.DecodeBlobInfo(resp, &info)
 			found = true
 			return err
 		},
@@ -154,12 +152,12 @@ func (rpc *rpcClient) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobI
 type rpcServer struct {
 	codec codec.Codec
 	store merkle.Store
-	log   log.Log
+	log   *log.Log
 }
 
-func HTTPServer(store merkle.Store) http.Handler {
+func HTTPServer(codec codec.Codec, store merkle.Store) http.Handler {
 
-	rpc := &rpcServer{store: store}
+	rpc := &rpcServer{codec: codec, store: store, log: log.KV("rpc", "server")}
 	router := httprouter.New()
 	router.PUT("/v1/nodes", rpc.PutNode)
 	router.GET("/v1/nodes", rpc.GetNode)
@@ -185,7 +183,8 @@ func HTTPServer(store merkle.Store) http.Handler {
 func (rpc *rpcServer) PutNode(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 
-	node, err := rpc.codec.DecodeNode(r.Body)
+	var node merkle.Node
+	err := rpc.codec.DecodeNode(r.Body, &node)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "%v", err)
@@ -203,7 +202,8 @@ func (rpc *rpcServer) PutNode(w http.ResponseWriter, r *http.Request, _ httprout
 func (rpc *rpcServer) GetNode(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 
-	sum, err := rpc.codec.DecodeSum(r.Body)
+	var sum thash.Sum
+	err := rpc.codec.DecodeSum(r.Body, &sum)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "%v", err)
@@ -229,14 +229,18 @@ func (rpc *rpcServer) GetNode(w http.ResponseWriter, r *http.Request, _ httprout
 func (rpc *rpcServer) PutBlob(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 
-	sum, data, err := rpc.codec.DecodeBlob(r.Body)
+	var (
+		sum thash.Sum
+		buf = bytes.NewBuffer(nil)
+	)
+	err := rpc.codec.DecodeBlob(r.Body, &sum, buf)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "%v", err)
 		return
 	}
 
-	err = rpc.store.PutBlob(ctx, sum, data)
+	err = rpc.store.PutBlob(ctx, sum, buf.Bytes())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintf(w, "%v", err)
@@ -247,7 +251,8 @@ func (rpc *rpcServer) PutBlob(w http.ResponseWriter, r *http.Request, _ httprout
 func (rpc *rpcServer) GetBlob(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 
-	sum, err := rpc.codec.DecodeSum(r.Body)
+	var sum thash.Sum
+	err := rpc.codec.DecodeSum(r.Body, &sum)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "%v", err)
@@ -273,7 +278,8 @@ func (rpc *rpcServer) GetBlob(w http.ResponseWriter, r *http.Request, _ httprout
 func (rpc *rpcServer) InfoBlob(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 
-	sum, err := rpc.codec.DecodeSum(r.Body)
+	var sum thash.Sum
+	err := rpc.codec.DecodeSum(r.Body, &sum)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		fmt.Fprintf(w, "%v", err)

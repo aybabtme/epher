@@ -9,12 +9,12 @@ import (
 	"golang.org/x/crypto/sha3"
 )
 
-type Type string
+type Type uint16
 
 const (
-	Blake2B512 Type = "blake2b-512"
-	SHA1       Type = "sha1"
-	SHA3       Type = "sha3"
+	Blake2B512 Type = iota + 1
+	SHA1
+	SHA3
 )
 
 type Sum struct {
