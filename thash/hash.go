@@ -3,7 +3,7 @@ package thash
 import (
 	"hash"
 
-	"crypto/sha1"
+	"fmt"
 
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/sha3"
@@ -13,7 +13,6 @@ type Type uint16
 
 const (
 	Blake2B512 Type = iota + 1
-	SHA1
 	SHA3
 )
 
@@ -53,10 +52,10 @@ func New(ht Type) Hash {
 	switch ht {
 	case Blake2B512:
 		h, err = blake2b.New512(nil)
-	case SHA1:
-		h = sha3.New512()
 	case SHA3:
-		h = sha1.New()
+		h = sha3.New512()
+	default:
+		panic(fmt.Sprintf("not a valid type: %v", ht))
 	}
 	if err != nil {
 		panic(err)
