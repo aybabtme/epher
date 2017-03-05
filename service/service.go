@@ -1,57 +1,108 @@
 package service
 
 import (
-	"context"
-	"io"
+	"math/rand"
 	"net"
+	"net/http"
 
 	"github.com/aybabtme/epher/cluster"
+	"github.com/aybabtme/epher/codec"
 	"github.com/aybabtme/epher/merkle"
-	"github.com/aybabtme/epher/thash"
+	"github.com/aybabtme/epher/store"
 )
 
-func Start(sd cluster.Discovery, store merkle.Store) error {
-
-	// create a listeners for our RPC
-	l, err := net.Listen("tcp", sd.Self().Addr.String()+":0")
-	if err != nil {
-		return err
+func newStorePool(rc cluster.Cluster, connect func(cluster.Node) merkle.Store) store.Pool {
+	return func() []merkle.Store {
+		self := rc.Self()
+		nodes := rc.Members()
+		stores := make([]merkle.Store, 0, len(nodes)-1)
+		for _, nd := range nodes {
+			if nd == self {
+				continue
+			}
+			stores = append(stores, connect(nd))
+		}
+		return stores
 	}
+}
+
+type Svc interface {
+	Close() error
+}
+
+func Start(r *rand.Rand, rc cluster.RemoteCluster, codec codec.Codec, local merkle.Store) (Svc, error) {
+
+	var l net.Listener
+	lc, err := rc.Join(func(ip string) (net.Addr, error) {
+		var err error
+		l, err = net.Listen("tcp", ip+":0")
+		if err != nil {
+			return nil, err
+		}
+		return l.Addr(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pool := newStorePool(lc, func(nd cluster.Node) merkle.Store {
+		out := store.HTTPClient(nd.Addr, codec, &http.Client{})
+		// don't waste time asking for the same things to many people
+		out = store.SingleFlight(out)
+		return out
+	})
+
+	// we want to serve from our local store if we can
+	// otherwise we'll do a random search with our neighbours
+	// TODO: use informed search instead of random search
+
+	aggregate := store.Layer(
+		// first ping our local store
+		local,
+		// then ping a few people
+		store.Race(
+			store.RaceRandomOf(r, store.GrowthLog2, 3),
+			pool,
+		),
+		// then ping a lot more people!
+		store.Race(
+			store.RaceRandomOf(r, store.GrowthLog2Square, 9),
+			pool,
+		),
+	)
+
+	aggregate = store.SingleFlight(aggregate)
 
 	svc := &service{
-		sd:    sd,
-		store: store,
-		l:     l,
+		srv: &http.Server{
+			Handler: store.HTTPServer(
+				codec,
+				store.SingleFlight(local),
+			),
+		},
+		l: l,
 	}
 
-	return svc.run()
+	go svc.srv.Serve(l)
+
+	return svc, nil
 }
 
 type service struct {
-	sd    cluster.Discovery
-	store merkle.Store
+	cluster cluster.Cluster
+	srv     *http.Server
 
 	l net.Listener
 }
 
-func (svc *service) run() error {
-
-	// tell people where to reach us
-	return nil
-}
-
-func (svc *service) GetBlob(ctx context.Context, sum thash.Sum, w io.Writer) error {
-	tree, err := merkle.RetrieveTree(ctx, sum, svc.store)
-	if err != nil {
+func (svc *service) Close() error {
+	if err := svc.cluster.Leave(); err != nil {
+		_ = svc.l.Close()
 		return err
 	}
-	invalid, err := tree.Retrieve(ctx, w, svc.store)
-
-	go svc.repairBlob(invalid)
-
-	return err
-}
-
-func (svc *service) repairBlob(invalidNodes []*merkle.Tree) {
-	// TODO: fetch the repaired blobs
+	if err := svc.srv.Close(); err != nil {
+		_ = svc.l.Close()
+		return err
+	}
+	return svc.l.Close()
 }

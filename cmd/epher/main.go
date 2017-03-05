@@ -1,20 +1,16 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/alecthomas/kingpin"
-	"github.com/aybabtme/epher/cluster"
-	"github.com/aybabtme/epher/service"
-	"github.com/aybabtme/epher/store"
 )
 
 var (
 	app = kingpin.New("epher", "A highly available, content addressable distributed blob storage.")
 
-	node      = app.Command("node", "Join a cluster and become a storage node.")
-	storage   = node.Flag("store", "Type of storage to use.").Required().Default("memory").Enum("memory")
+	node = app.Command("node", "Join a cluster and become a storage node.")
+	// storage   = node.Flag("store", "Type of storage to use.").Default("memory").Required().Enum("memory", "fs")
 	joinAddrs = node.Flag("addrs", "Addresses of some members of the cluster to join.").Required().Strings()
 
 	blob     = app.Command("blob", "Manipulate blobs in an epher cluster.")
@@ -36,12 +32,12 @@ func main() {
 }
 
 func runNode(addrs ...string) {
-	sd, err := cluster.JoinLAN(addrs...)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = service.Start(sd, store.NewMemoryStore())
-	if err != nil {
-		log.Fatal(err)
-	}
+	// sd, err := cluster.JoinLAN(addrs...)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// err = service.Start(sd, store.NewMemoryStore())
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 }

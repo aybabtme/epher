@@ -9,3 +9,5 @@ Highly available, high throughput content addressable distributed blob storage.
 Because it's fun.
 
 # WIP
+
+I'm playing with this when I'm on planes or have a sunday coffee rush to code.

@@ -9,29 +9,31 @@ import (
 	"github.com/aybabtme/epher/thash"
 )
 
-type LBStrategy func([]merkle.Store) merkle.Store
+type LBStrategy func(Pool) merkle.Store
 
 func LBRandom(r *rand.Rand) LBStrategy {
-	return func(in []merkle.Store) merkle.Store {
+	return func(pool Pool) merkle.Store {
+		in := pool()
 		return in[r.Intn(len(in))]
 	}
 }
 
 func LBRoundRobin(r *rand.Rand) LBStrategy {
 	idx := r.Int63n(1e6)
-	return func(in []merkle.Store) merkle.Store {
+	return func(pool Pool) merkle.Store {
+		in := pool()
 		i := atomic.AddInt64(&idx, 1)
 		return in[int(i)%len(in)]
 	}
 }
 
-func LB(strategy LBStrategy, pool ...merkle.Store) merkle.Store {
+func LB(strategy LBStrategy, pool Pool) merkle.Store {
 	return &loadBalance{strategy: strategy, pool: pool}
 }
 
 type loadBalance struct {
 	strategy LBStrategy
-	pool     []merkle.Store
+	pool     Pool
 }
 
 func (lb *loadBalance) pick(ctx context.Context, fn func(ctx context.Context, store merkle.Store) bool) bool {
