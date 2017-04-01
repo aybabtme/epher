@@ -11,5 +11,12 @@ func Start(t *testing.T, n int) {
 	}
 
 	// create N nodes
+	for i := 0; i < n; i++ {
+
+		store := StartStore(t)
+
+		StartService(t, )
+
+	}
 
 }

@@ -11,21 +11,6 @@ import (
 	"github.com/aybabtme/epher/store"
 )
 
-func newStorePool(rc cluster.Cluster, connect func(cluster.Node) merkle.Store) store.Pool {
-	return func() []merkle.Store {
-		self := rc.Self()
-		nodes := rc.Members()
-		stores := make([]merkle.Store, 0, len(nodes)-1)
-		for _, nd := range nodes {
-			if nd == self {
-				continue
-			}
-			stores = append(stores, connect(nd))
-		}
-		return stores
-	}
-}
-
 type Svc interface {
 	Close() error
 }
@@ -45,12 +30,6 @@ func Start(r *rand.Rand, rc cluster.RemoteCluster, codec codec.Codec, local merk
 		return nil, err
 	}
 
-	pool := newStorePool(lc, func(nd cluster.Node) merkle.Store {
-		out := store.HTTPClient(nd.Addr, codec, &http.Client{})
-		// don't waste time asking for the same things to many people
-		out = store.SingleFlight(out)
-		return out
-	})
 
 	// we want to serve from our local store if we can
 	// otherwise we'll do a random search with our neighbours
