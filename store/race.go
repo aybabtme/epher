@@ -82,8 +82,9 @@ type raced struct {
 }
 
 func (race *raced) PutNode(ctx context.Context, node merkle.Node) error {
-	_, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, error) {
-		return nil, store.PutNode(ctx, node)
+	_, _, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, bool, error) {
+		err := store.PutNode(ctx, node)
+		return nil, err == nil, err
 	})
 	return err
 }
@@ -93,13 +94,15 @@ func (race *raced) GetNode(ctx context.Context, sum thash.Sum) (merkle.Node, boo
 		node  merkle.Node
 		found bool
 	}
-	iface, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, error) {
+	iface, success, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, bool, error) {
 		node, found, err := store.GetNode(ctx, sum)
-		return &res{node: node, found: found}, err
+		return &res{node: node, found: found}, found, err
 	})
-	out := iface.(*res)
-	return out.node, out.found, err
-
+	if success {
+		out := iface.(*res)
+		return out.node, out.found, err
+	}
+	return merkle.Node{}, false, err
 }
 
 func (race *raced) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobInfo, bool, error) {
@@ -107,17 +110,21 @@ func (race *raced) InfoBlob(ctx context.Context, sum thash.Sum) (merkle.BlobInfo
 		info  merkle.BlobInfo
 		found bool
 	}
-	iface, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, error) {
+	iface, success, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, bool, error) {
 		info, found, err := store.InfoBlob(ctx, sum)
-		return &res{info: info, found: found}, err
+		return &res{info: info, found: found}, found, err
 	})
-	out := iface.(*res)
-	return out.info, out.found, err
+	if success {
+		out := iface.(*res)
+		return out.info, out.found, err
+	}
+	return merkle.BlobInfo{}, false, err
 }
 
 func (race *raced) PutBlob(ctx context.Context, sum thash.Sum, blob []byte) error {
-	_, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, error) {
-		return nil, store.PutBlob(ctx, sum, blob)
+	_, _, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, bool, error) {
+		err := store.PutBlob(ctx, sum, blob)
+		return nil, err == nil, err
 	})
 	return err
 }
@@ -127,20 +134,23 @@ func (race *raced) GetBlob(ctx context.Context, sum thash.Sum) ([]byte, bool, er
 		data  []byte
 		found bool
 	}
-	iface, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, error) {
+	iface, success, err := race.first(ctx, func(ctx context.Context, store merkle.Store) (interface{}, bool, error) {
 		data, found, err := store.GetBlob(ctx, sum)
-		return &res{data: data, found: found}, err
+		return &res{data: data, found: found}, found, err
 	})
-	out := iface.(*res)
-	return out.data, out.found, err
+	if success {
+		out := iface.(*res)
+		return out.data, out.found, err
+	}
+	return nil, false, err
 }
 
 // first calls all the backend stores concurrently and returns the first
-// answer it received.
+// successful answer it received.
 func (race *raced) first(
 	ctx context.Context,
-	fn func(context.Context, merkle.Store) (interface{}, error),
-) (interface{}, error) {
+	fn func(context.Context, merkle.Store) (answer interface{}, success bool, err error),
+) (interface{}, bool, error) {
 
 	// pick the backing stores that will be concurring
 	concurrent := race.concurrent()
@@ -156,38 +166,34 @@ func (race *raced) first(
 
 	var wg sync.WaitGroup
 	for _, cc := range concurrent {
+
 		wg.Add(1)
 		go func(cc merkle.Store) {
 			defer wg.Done()
-
-			out, err := fn(ctx, cc)
+			out, success, err := fn(ctx, cc)
 			if err != nil {
-				errc <- err
-			} else {
+				select {
+				case errc <- err:
+				default:
+				}
+			} else if success {
 				select {
 				case first <- out:
 				default:
 				}
 			}
-
 		}(cc)
 	}
 
 	go func() {
 		wg.Wait()
-		close(first)
 		close(errc)
+		close(first)
 	}()
 
-	var err error
-	for {
-		select {
-		case out := <-first:
-			return out, err
-		case anErr := <-errc:
-			if err != nil {
-				err = anErr
-			}
-		}
+	for out := range first {
+		return out, true, nil
 	}
+	err := <-errc
+	return nil, false, err
 }

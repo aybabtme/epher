@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
 	"strings"
+
+	"net/url"
 
 	"github.com/aybabtme/epher/codec"
 	"github.com/aybabtme/epher/merkle"
@@ -20,7 +21,7 @@ import (
 )
 
 type rpcClient struct {
-	baseURL string
+	baseURL *url.URL
 	codec   codec.Codec
 	cl      *http.Client
 }
@@ -30,7 +31,13 @@ func HTTPClient(addr string, codec codec.Codec, cl *http.Client) merkle.Store {
 		cl = new(http.Client)
 	}
 	cl.Transport = &nethttp.Transport{cl.Transport}
-	return &rpcClient{baseURL: addr, codec: codec, cl: cl}
+
+	u := &url.URL{
+		Scheme: "http", // don't use clear text =/
+		Host:   addr,
+	}
+
+	return &rpcClient{baseURL: u, codec: codec, cl: cl}
 }
 
 func (rpc *rpcClient) do(
@@ -48,8 +55,12 @@ func (rpc *rpcClient) do(
 		}
 		body = buf
 	}
+	u, err := rpc.baseURL.Parse(pathStr)
+	if err != nil {
+		return err
+	}
 
-	req, err := http.NewRequest(method, path.Join(rpc.baseURL, pathStr), body)
+	req, err := http.NewRequest(method, u.String(), body)
 	if err != nil {
 		return err
 	}

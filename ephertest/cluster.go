@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/aybabtme/epher/cluster"
+	"github.com/aybabtme/log"
 )
 
 func ServiceDiscovery(t *testing.T) cluster.Discovery {
@@ -24,6 +25,7 @@ func (mem *memDiscovery) Discover(addr ...string) (cluster.RemoteCluster, error)
 }
 
 func (mem *memDiscovery) join(self cluster.Node) error {
+	log.Info("joining!")
 	mem.membersMu.Lock()
 	mem.members[self] = struct{}{}
 	mem.membersMu.Unlock()
@@ -31,6 +33,7 @@ func (mem *memDiscovery) join(self cluster.Node) error {
 }
 
 func (mem *memDiscovery) leave(self cluster.Node) error {
+	log.Info("leaving!")
 	mem.membersMu.Lock()
 	delete(mem.members, self)
 	mem.membersMu.Unlock()
@@ -39,7 +42,8 @@ func (mem *memDiscovery) leave(self cluster.Node) error {
 
 func (mem *memDiscovery) memberList() []cluster.Node {
 	mem.membersMu.Lock()
-	dup := make([]cluster.Node, len(mem.members))
+	log.KV("count", len(mem.members)).Info("memberList!")
+	dup := make([]cluster.Node, 0, len(mem.members))
 	for nd := range mem.members {
 		dup = append(dup, nd)
 	}
