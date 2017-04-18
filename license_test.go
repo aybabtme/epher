@@ -15,9 +15,9 @@ func TestCheckLicenses(t *testing.T) {
 		license.LicenseApache20:  struct{}{},
 		license.LicenseMPL20:     struct{}{},
 		license.LicenseUnlicense: struct{}{},
+		license.LicenseISC:       struct{}{},
 	}
 	blacklist := map[string]struct{}{
-		license.LicenseISC:    struct{}{},
 		license.LicenseGPL20:  struct{}{},
 		license.LicenseGPL30:  struct{}{},
 		license.LicenseLGPL21: struct{}{},
